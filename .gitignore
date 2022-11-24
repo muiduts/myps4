@@ -1,0 +1,4 @@
+test/**
+build/myps4
+build/*.c
+build/*.h
