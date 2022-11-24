@@ -24,7 +24,6 @@
 %left MOD
 %left '+' '-'
 %left '*' '/'
-%left 'plusminus'
 
 %type <content> program
 %type declarations
@@ -33,22 +32,19 @@
 %type <content> command
 %type type
 %type <content> assignment
-%type late_binding
+%type <content> late_binding
 %type <content> call
-%type termcall
-%type forloop
+%type <content> termcall
+%type <content> forloop
 %type <content> expression
 %type <content> expression_list
-%type lone_assignment
-%type <content> unsigned_expression
-%type plusminus 
 %type <content> nonempty_expression_list
 %type <content> factor
 %type <content> number
 %type <content> point
 %type <content> path
-%type term
-%type variable
+%type <content> term
+%type <content> variable
 %type eval_func
 
 %code requires {
@@ -71,15 +67,16 @@ extern int yylex();
 extern FILE *yyin;
 extern int yylineno;
 
+map<string, string> FUNCTION_TABLE = {
+    {string("draw"), string("stroke")}
+};
+
+
 void
 yyerror(ComplexNode **root, const char *s)
 {
     cerr << "Error (line " << yylineno << ")\n" << s << "\n\n";
 }
-
-map<string, string> FUNCTION_TABLE = {
-    {string("draw"), string("stroke")}
-};
 
 %}
 %%
@@ -94,10 +91,10 @@ map<string, string> FUNCTION_TABLE = {
     declaration     : VAR ID ':' type ';'
     ;
     command         : assignment { $$ = $1; }
-                    | late_binding { $$ = NULL; }
+                    | late_binding { $$ = $1; }
                     | call { $$ = $1; }
-                    | termcall { $$ = NULL; }
-                    | forloop { $$ = NULL; }
+                    | termcall { $$ = $1; }
+                    | forloop { $$ = $1; }
     ;
     type            : TINT
                     | TNUM
@@ -109,7 +106,8 @@ map<string, string> FUNCTION_TABLE = {
     assignment      : ID ':' '=' expression ';'
                         { $$ = new ComplexNode("/" + $1->code + " " + $4->code + " def"); }
     ;
-    late_binding    : ID LATE_BIND expression ';' { }
+    late_binding    : ID LATE_BIND expression ';'
+                        { $$ = new ComplexNode("/" + $1->code + " " + $3->code + " def"); }
     ;
     call            : ID '(' expression_list ')' ';'
                         {
@@ -117,28 +115,31 @@ map<string, string> FUNCTION_TABLE = {
                             $$ = $3;
                         }
     ;
-    termcall        : ID ';' { }
+    termcall        : ID ';' { $$ = $1; }
     ;
-    forloop         : FOR lone_assignment TO expression STEP expression DO commands DONE ';' { }
-    expression      : unsigned_expression { $$ = $1; }
-                    | plusminus unsigned_expression { }
+    forloop         : FOR ID ':' '=' expression TO expression STEP expression DO commands DONE ';'
+                        { $$ = new ComplexNode($5->code + " " + $9->code + " " + $7->code + " { /"
+                                               + $2->code + " exch def\n" + $11->code
+                                               + "} for"); }
+    expression      : factor { $$ = $1; }
+                    | '+' factor { $$ = $2; }
+                    | '-' factor { $$ = new ComplexNode($2->code + " -1 mul"); }
+                    | '(' expression ')' { $$ = $2; }
+                    | '+' '(' expression ')' { $$ = $3; }
+                    | '-' '(' expression ')' { $$ = new ComplexNode($3->code + " -1 mul"); }
+                    | expression '+' expression
+                        { $$ = new ComplexNode($1->code + " " + $3->code + " add"); }
+                    | expression '-' expression
+                        { $$ = new ComplexNode($1->code + " " + $3->code + " sub"); }
+                    | expression '*' expression
+                        { $$ = new ComplexNode($1->code + " " + $3->code + " mul"); }
+                    | expression '/' expression
+                        { $$ = new ComplexNode($1->code + " " + $3->code + " div"); }
+                    | expression MOD expression
+                        { $$ = new ComplexNode($1->code + " " + $3->code + " mod"); }
     ;
     expression_list : %empty { $$ = new ComplexNode(""); }
                     | nonempty_expression_list { $$ = $1; }
-    ;
-    lone_assignment : ID ':' '=' expression { }
-    unsigned_expression : factor { $$ = $1; }
-                        | '(' expression ')' { }
-                        | unsigned_expression '+' unsigned_expression
-                            { $$ = new ComplexNode($1->code + " " + $3->code + " add"); }
-                        | unsigned_expression '-' unsigned_expression
-                            { $$ = new ComplexNode($1->code + " " + $3->code + " sub"); }
-                        | unsigned_expression '*' unsigned_expression { }
-                        | unsigned_expression '/' unsigned_expression { }
-                        | unsigned_expression MOD unsigned_expression { }
-    ;
-    plusminus           : '+' { }
-                        | '-' { }
     ;
     nonempty_expression_list
                         : expression { $$ = new ComplexNode(""); $$->append_child($1); }
@@ -152,8 +153,8 @@ map<string, string> FUNCTION_TABLE = {
                     | STRING { $$ = NULL; }
                     | point { $$ = $1; }
                     | path { $$ = $1; }
-                    | term { $$ = NULL; }
-                    | variable { $$ = NULL; }
+                    | term { $$ = $1; }
+                    | variable { $$ = $1; }
                     | eval_func { $$ = NULL; }
     ;
     number          : INT { $$ = $1; }
@@ -172,9 +173,10 @@ map<string, string> FUNCTION_TABLE = {
                             $$ = $2;
                         }
     ;
-    term            : '{' commands '}' { }
+    term            : '{' commands '}'
+                        { $$ = new ComplexNode("{ " + $2->code + "}"); }
     ;
-    variable        : ID { }
+    variable        : ID { $$ = $1; }
     ;
     eval_func       : ID '(' expression_list ')' { }
 %%

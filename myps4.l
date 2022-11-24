@@ -1,10 +1,12 @@
 %{
 #include <stdio.h>
 #include "myps4.tab.h"
+
+extern int INDENT_LEVEL;
 %}
 letter [a-zA-Z]
 digit [0-9]
-special_symbol [-:=;()+,*/\{\}.]
+special_symbol [-:=;()+,*/.\{\}]
 string \"[^\"]*\"
 id {letter}({letter}|{digit})*
 tint Int

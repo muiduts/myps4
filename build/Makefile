@@ -1,16 +1,15 @@
-CFLAGS=-Wall
+CC=g++
+CFLAGS=-Wall -g
 
-myps_check: signatures.o syntax.o parse.o scan.o 
-	$(CC) -o myps_check signatures.o syntax.o parse.o scan.o -lfl
-signatures.o: ../signatures.c ../signatures.h ../syntax.h
-	$(CC) -c -o signatures.o ../signatures.c
-syntax.o: ../syntax.c ../syntax.h myps_check.tab.h
-	$(CC) -c -o syntax.o ../syntax.c
-parse.o: myps_check.tab.c ../signatures.h ../syntax.h
-	$(CC) -c -o parse.o myps_check.tab.c
-scan.o: lex.yy.c myps_check.tab.h
+myps4: syntree.o parse.o scan.o 
+	$(CC) -o myps4 syntree.o parse.o scan.o
+syntree.o: ../syntree.cpp ../syntree.h myps4.tab.h
+	$(CC) -c -o syntree.o ../syntree.cpp
+parse.o: myps4.tab.c ../syntree.h
+	$(CC) -c -o parse.o myps4.tab.c
+scan.o: lex.yy.c myps4.tab.h
 	$(CC) -c -o scan.o lex.yy.c
-myps_check.tab.c myps_check.tab.h &: ../myps_check.y ../syntax.h
-	bison -d ../myps_check.y
-lex.yy.c: ../myps_check.l
-	flex ../myps_check.l
+myps4.tab.c myps4.tab.h &: ../myps4.y ../syntree.h
+	bison -Wall -d ../myps4.y
+lex.yy.c: ../myps4.l
+	flex ../myps4.l
