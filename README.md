@@ -1,5 +1,5 @@
 # myps4
-The myPS partE of Einsendeaufgabe 4
+The myPS partE of Einsendeaufgabe 4.
 
 # Compilation
 Simply issue `make`.
