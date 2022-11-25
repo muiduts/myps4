@@ -151,6 +151,41 @@ set<string> PATH_CONSTRUCTORS = {
     string("string2path")
 };
 
+/* This function checks if <code> is enclosed in curly braces. It is needed to implement the rule,
+ * that curly braces around the last argument of the transformations and of "clip" can be omitted if
+ * that argument is only one command. */
+int
+is_block(string code)
+{
+    int nopen;
+    auto b = code.begin(), e = code.end(), c = b;
+
+    if(code[0] != '{')
+        return 0;
+    nopen = 0;
+    c = b;
+    c++;
+    nopen = 1;
+    while(c != e) {
+        if(*c == '{')
+            nopen++;
+        else if(*c == '}')
+            nopen--;
+        if(nopen == 0) {
+            c++;
+            if(c == e) {
+                return 1;
+            }
+            else
+                return 0;
+            c--;
+        }
+        c++;
+    }
+
+    return 0;
+}
+
 void
 yyerror(ComplexNode **root, const char *s)
 {
@@ -195,7 +230,7 @@ escape_parentheses(const string &s)
                     | late_binding { $$ = $1; }
                     | call { $$ = $1; }
                     | termcall { $$ = $1; }
-                    | forloop { $$ = $1; }
+                    | forloop ';' { $$ = $1; }
     ;
     type            : TINT
                     | TNUM
@@ -223,7 +258,8 @@ escape_parentheses(const string &s)
                             if(DEFERRING_OPERATIONS.count($1->code)) {
                                 auto c = $3->children.begin();
                                 advance(c, DEFERRING_OPERATIONS[$1->code]);
-                                (*c)->code = "{" + (*c)->code + "}";
+                                if(!is_block((*c)->code))
+                                    (*c)->code = "{" + (*c)->code + "}";
                             }
                             if($1->code == "write" && $3->children.size() == 1)
                                 $3->append_child(new ComplexNode("currentpoint 3 2 roll"));
@@ -238,7 +274,7 @@ escape_parentheses(const string &s)
     ;
     termcall        : ID ';' { $$ = $1; }
     ;
-    forloop         : FOR ID ':' '=' expression TO expression STEP expression DO commands DONE ';'
+    forloop         : FOR ID ':' '=' expression TO expression STEP expression DO commands DONE
                         { $$ = new ComplexNode($5->code + " " + $9->code + " " + $7->code + " { /"
                                                + $2->code + " exch def\n" + $11->code
                                                + "} for"); }
@@ -260,6 +296,7 @@ escape_parentheses(const string &s)
                         { $$ = new ComplexNode($1->code + " " + $3->code + " div"); }
                     | expression MOD expression
                         { $$ = new ComplexNode($1->code + " " + $3->code + " mod"); }
+                    | forloop { $$ = $1; }
     ;
     expression_list : %empty { $$ = new ComplexNode(""); }
                     | nonempty_expression_list { $$ = $1; }
@@ -309,12 +346,12 @@ escape_parentheses(const string &s)
                                  * last argument from execution. */
                                 auto c = $3->children.begin();
                                 advance(c, DEFERRING_OPERATIONS[$1->code]);
-                                (*c)->code = "{" + (*c)->code + "}";
+                                if(!is_block((*c)->code))
+                                    (*c)->code = "{" + (*c)->code + "}";
                             }
                             $3->concat_children(" ", " ", " ");
                             if(OPERATION_TABLE.count($1->code))
-                                $$ = new ComplexNode($3->code
-                                                     + OPERATION_TABLE[$1->code]);
+                                $$ = new ComplexNode($3->code + OPERATION_TABLE[$1->code]);
                             else {
                                 cerr << "Unknown operation \"" + $1->code + "\".\n";
                                 exit(1);
