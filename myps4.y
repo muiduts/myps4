@@ -71,6 +71,7 @@ extern int yylineno;
 
 const char *PREAMBLE = "%!PS-Adobe\n%%Creator: myps4 compiler \n%%Title: ";
 
+/* Every operator is directly mapped to a sequence of postscript commands: */
 map<string, string> OPERATION_TABLE = {
     {string("draw"), string("cvx exec stroke grestore")},
     {string("fill"), string("exec fill grestore")},
@@ -83,6 +84,7 @@ map<string, string> OPERATION_TABLE = {
     {string("string2path"), string("3 -2 roll moveto true charpath")},
     {string("num2string"), string("100 string cvs")},
     {string("write"), string("3 -2 roll moveto show")},
+
     {string("rotate"), string("\
 gsave \
 2 -1 roll \
@@ -110,12 +112,20 @@ grestore")},
     {string("abs"), string("abs")},
     {string("exp"), string("exp")}
 };
+
+/* These operations must defer the execution of their last argument until the current matrix has
+ * been modiefied. If the last argument is between curly braces in the myPS code, this would happen
+ * anyway. Otherwise, we must put curly braces around Whatever postscript code this argument expands
+ * to. I found it simplest to always put the braces. */
 map<string, int> DEFERRING_OPERATIONS = {
     {string("rotate"), 1},
     {string("scale"), 2},
     {string("translate"), 2},
 };
 
+/* These operations expand to postscript code between curly braces with the "executable" attribute
+ * disabled, i.e. with the "literal" attribute. This code can be used to construct a path. Simply
+ * append a "cvx" to make it executable and execute it when needed. */
 set<string> PATH_CONSTRUCTORS = {
     string("arc"),
     string("ellipse"),
@@ -178,9 +188,14 @@ escape_parentheses(const string &s)
     assignment      : ID ':' '=' expression ';'
                         { $$ = new ComplexNode("/" + $1->code + " " + $4->code + " def"); }
     ;
+    /* Late binding is implemented in a very simple way: We put curly braces around the right side
+     * so it becomes a procedure. Later when the variable is referenced, the procedure is executed
+     * automatically. When the right side is already between curly braces nothing is to be done. */
     late_binding    : ID LATE_BIND expression ';'
                         { 
-                            $$ = new ComplexNode("/" + $1->code + " { " + $3->code + " } " + " def");
+                            if($3->code[0] != '{' )
+                                $3->code = "{ " + $3->code + " }";
+                            $$ = new ComplexNode("/" + $1->code + " " + $3->code + " def");
                         }
     ;
     call            : ID '(' expression_list ')' ';'
