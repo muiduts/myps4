@@ -33,7 +33,7 @@ step { return STEP; }
 do { return DO; }
 done { return DONE; }
 mod {return MOD; }
-{string} { return STRING; }
+{string} { yylval.content = new ComplexNode(yytext); return STRING; }
 {tint} { return TINT; }
 {tnum} { return TNUM; }
 {tstring} { return TSTRING; }

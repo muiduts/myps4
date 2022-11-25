@@ -14,6 +14,12 @@ ComplexNode::append_child(ComplexNode *node)
 }
 
 void
+ComplexNode::prepend_child(ComplexNode *node)
+{
+    this->children.push_front(node);
+}
+
+void
 ComplexNode::concat_children(string first_separator, string separator, string terminator)
 {
     int islast;

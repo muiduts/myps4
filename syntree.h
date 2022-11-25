@@ -12,6 +12,7 @@ struct ComplexNode {
     ComplexNode(const char*);
     ComplexNode(std::string);
     void append_child(ComplexNode*);
+    void prepend_child(ComplexNode*);
     void concat_children(std::string, std::string, std::string);
 };
 

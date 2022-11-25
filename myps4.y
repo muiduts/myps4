@@ -1,5 +1,5 @@
 %token PICTURE
-%token STRING
+%token <content> STRING
 %token START
 %token END
 %token FOR
@@ -45,7 +45,8 @@
 %type <content> path
 %type <content> term
 %type <content> variable
-%type eval_func
+%type <content> string
+%type <content> eval_func
 
 %code requires {
 #include "../syntree.h"
@@ -60,6 +61,7 @@
 #include <iostream>
 #include <list>
 #include <map>
+#include <set>
 
 using namespace std;
 
@@ -67,10 +69,58 @@ extern int yylex();
 extern FILE *yyin;
 extern int yylineno;
 
-map<string, string> FUNCTION_TABLE = {
-    {string("draw"), string("stroke")}
+const char *PREAMBLE = "%!PS-Adobe\n%%Creator: myps4 compiler \n%%Title: ";
+
+map<string, string> OPERATION_TABLE = {
+    {string("draw"), string("exec stroke grestore")},
+    {string("fill"), string("exec fill grestore")},
+    {string("setcolor"), string("setrgbcolor")},
+    {string("setdrawstyle"), string("2 array astore 0 setdash")},
+    {string("setfont"), string("selectfont")},
+    {string("setlinewidth"), string("setlinewidth")},
+    {string("arc"), string("newpath arc")},
+    {string("ellipse"), string("newpath 6 -2 roll translate 4 -2 roll dup 3 1 roll div 1 scale 3 1 roll 0 0 5 2 roll arc")},
+    {string("string2path"), string("3 -2 roll moveto true charpath")},
+    {string("num2string"), string("100 string cvs")},
+    {string("write"), string("3 -2 roll moveto show")},
+    {string("rotate"), string("\
+gsave \
+2 -1 roll \
+rotate \
+exec \
+grestore")},
+
+    {string("scale"), string("\
+gsave \
+3 -2 roll \
+scale \
+exec \
+grestore")},
+
+    {string("translate"), string("\
+gsave \
+3 -2 roll \
+translate \
+exec \
+grestore")},
+
+    {string("sin"), string("sin")},
+    {string("cos"), string("cos")},
+    {string("ln"), string("ln")},
+    {string("abs"), string("abs")},
+    {string("exp"), string("exp")}
+};
+map<string, int> DEFERRING_OPERATIONS = {
+    {string("rotate"), 1},
+    {string("scale"), 2},
+    {string("translate"), 2},
 };
 
+set<string> PATH_CONSTRUCTORS = {
+    string("arc"),
+    string("ellipse"),
+    string("string2path")
+};
 
 void
 yyerror(ComplexNode **root, const char *s)
@@ -78,9 +128,31 @@ yyerror(ComplexNode **root, const char *s)
     cerr << "Error (line " << yylineno << ")\n" << s << "\n\n";
 }
 
+string
+strip_quotes(const string &s)
+{
+    return s.substr(1, s.size() - 2);
+}
+
+string
+escape_parentheses(const string &s)
+{
+    string res;
+
+    for(auto c = s.begin(); c != s.end(); c++) {
+        if(*c == '(' || *c == ')')
+            res += '\\';
+        res += *c;
+    }
+
+    return res;
+}
+
 %}
 %%
-    program : PICTURE STRING declarations START commands END { *root = $5; }
+    program         : PICTURE string declarations START commands END
+                        { *root = new ComplexNode(PREAMBLE + $2->code + "\n%%EndComments\n\n"
+                                                  + $5->code); }
     ;
     declarations    : %empty
                     | declaration declarations
@@ -107,11 +179,27 @@ yyerror(ComplexNode **root, const char *s)
                         { $$ = new ComplexNode("/" + $1->code + " " + $4->code + " def"); }
     ;
     late_binding    : ID LATE_BIND expression ';'
-                        { $$ = new ComplexNode("/" + $1->code + " " + $3->code + " def"); }
+                        { 
+                            if($3->code[0] != '{')
+                                $3->code = '{' + $3->code + '}';
+                            $$ = new ComplexNode("/" + $1->code + " " + $3->code + " def");
+                        }
     ;
     call            : ID '(' expression_list ')' ';'
                         {
-                            $3->concat_children(" ", " ", " " + FUNCTION_TABLE[$1->code]);
+                            if(DEFERRING_OPERATIONS.count($1->code)) {
+                                auto c = $3->children.begin();
+                                advance(c, DEFERRING_OPERATIONS[$1->code]);
+                                (*c)->code = "{" + (*c)->code + "}";
+                            }
+                            if($1->code == "write" && $3->children.size() == 1)
+                                $3->append_child(new ComplexNode("currentpoint 3 2 roll"));
+                            if(OPERATION_TABLE.count($1->code))
+                                $3->concat_children(" ", " ", " " + OPERATION_TABLE[$1->code]);
+                            else {
+                                cerr << "Unknown operation \"" + $1->code + "\".\n";
+                                exit(1);
+                            }
                             $$ = $3;
                         }
     ;
@@ -142,20 +230,20 @@ yyerror(ComplexNode **root, const char *s)
                     | nonempty_expression_list { $$ = $1; }
     ;
     nonempty_expression_list
-                        : expression { $$ = new ComplexNode(""); $$->append_child($1); }
-                        | expression ',' nonempty_expression_list
-                            {
-                                $$ = $3;
-                                $$->append_child($1);
-                            }
+                    : expression { $$ = new ComplexNode(""); $$->append_child($1); }
+                    | expression ',' nonempty_expression_list
+                        {
+                            $3->prepend_child($1);
+                            $$ = $3;
+                        }
     ;
     factor          : number { $$ = $1; }
-                    | STRING { $$ = NULL; }
+                    | string { $$ = new ComplexNode("(" + $1->code + ")"); }
                     | point { $$ = $1; }
                     | path { $$ = $1; }
-                    | term { $$ = $1; }
                     | variable { $$ = $1; }
-                    | eval_func { $$ = NULL; }
+                    | eval_func { $$ = $1; }
+                    | term { $$ = $1; }
     ;
     number          : INT { $$ = $1; }
                     | FLOAT { $$ = $1; }
@@ -170,15 +258,33 @@ yyerror(ComplexNode **root, const char *s)
                                 exit(1);
                             }
                             $2->concat_children(" moveto ", " lineto ", " lineto") ;
-                            $$ = $2;
+                            $$ = new ComplexNode("gsave { newpath " + $2->code + "} bind");
                         }
     ;
     term            : '{' commands '}'
                         { $$ = new ComplexNode("{ " + $2->code + "}"); }
     ;
-    variable        : ID { $$ = $1; }
+    variable        : ID { $$ = new ComplexNode("/" + $1->code + " load"); }
     ;
-    eval_func       : ID '(' expression_list ')' { }
+    eval_func       : ID '(' expression_list ')'
+                        {
+                            if(DEFERRING_OPERATIONS.count($1->code)) {
+                                auto c = $3->children.begin();
+                                advance(c, DEFERRING_OPERATIONS[$1->code]);
+                                (*c)->code = "{" + (*c)->code + "}";
+                            }
+                            $3->concat_children(" ", " ", " ");
+                            if(OPERATION_TABLE.count($1->code))
+                                $$ = new ComplexNode($3->code
+                                                     + OPERATION_TABLE[$1->code]);
+                            else {
+                                cerr << "Unknown operation \"" + $1->code + "\".\n";
+                                exit(1);
+                            }
+                            if(PATH_CONSTRUCTORS.count($1->code))
+                                $$->code = "{ gsave " + $$->code + "} bind";
+                        }
+    string          : STRING { $$ = new ComplexNode(escape_parentheses(strip_quotes($1->code))); }
 %%
 
 void
