@@ -72,7 +72,7 @@ extern int yylineno;
 const char *PREAMBLE = "%!PS-Adobe\n%%Creator: myps4 compiler \n%%Title: ";
 
 map<string, string> OPERATION_TABLE = {
-    {string("draw"), string("exec stroke grestore")},
+    {string("draw"), string("cvx exec stroke grestore")},
     {string("fill"), string("exec fill grestore")},
     {string("setcolor"), string("setrgbcolor")},
     {string("setdrawstyle"), string("2 array astore 0 setdash")},
@@ -180,9 +180,7 @@ escape_parentheses(const string &s)
     ;
     late_binding    : ID LATE_BIND expression ';'
                         { 
-                            if($3->code[0] != '{')
-                                $3->code = '{' + $3->code + '}';
-                            $$ = new ComplexNode("/" + $1->code + " " + $3->code + " def");
+                            $$ = new ComplexNode("/" + $1->code + " { " + $3->code + " } " + " def");
                         }
     ;
     call            : ID '(' expression_list ')' ';'
@@ -264,7 +262,7 @@ escape_parentheses(const string &s)
     term            : '{' commands '}'
                         { $$ = new ComplexNode("{ " + $2->code + "}"); }
     ;
-    variable        : ID { $$ = new ComplexNode("/" + $1->code + " load"); }
+    variable        : ID { $$ = $1; }
     ;
     eval_func       : ID '(' expression_list ')'
                         {
@@ -282,7 +280,7 @@ escape_parentheses(const string &s)
                                 exit(1);
                             }
                             if(PATH_CONSTRUCTORS.count($1->code))
-                                $$->code = "{ gsave " + $$->code + "} bind";
+                                $$->code = "{ gsave " + $$->code + "} cvlit";
                         }
     string          : STRING { $$ = new ComplexNode(escape_parentheses(strip_quotes($1->code))); }
 %%
