@@ -366,7 +366,7 @@ escape_parentheses(const string &s)
 void
 usage()
 {
-    cout << "Usage: myps_check [OPTION]... [FILE]\n  -s Show syntax tree.\n  -d Show syntax tree and debug track.\n";
+    cout << "Usage: myps4 [OPTION]... [FILE]\n  -d Show debug trace.\n";
 }
 
 void

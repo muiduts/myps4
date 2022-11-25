@@ -1,0 +1,38 @@
+%!PS-Adobe
+%%Creator: myps4 compiler 
+%%Title: myPS-Beispiel
+%%EndComments
+
+/x 300 def
+/y 300 def
+/rad 100 def
+/amp 100 def
+/drawellipse { 20 phi sin abs mul setlinewidth
+/c 0.4 0.4 phi cos mul add def
+/s 0.8 0.2 1.5 phi mul sin mul add def
+c s s setrgbcolor
+x 2 y mul {horz 90 mul {phi cos abs 1 {{ matrix currentmatrix amp phi sin mul 0 rad phi cos abs mul rad 0 360 newpath 6 -2 roll translate 4 -2 roll dup 3 1 roll div 1 scale 3 1 roll 0 0 5 2 roll arc} cvlit cvx exec stroke setmatrix} matrix currentmatrix 4 1 roll 3 -2 roll scale exec setmatrix} matrix currentmatrix 3 1 roll 2 -1 roll rotate exec setmatrix} matrix currentmatrix 4 1 roll 3 -2 roll translate exec setmatrix
+} def
+0 0.3 -1 mul y mul {{ matrix currentmatrix x 2.5 y mul 3 rad mul 2 rad mul 0 360 newpath 6 -2 roll translate 4 -2 roll dup 3 1 roll div 1 scale 3 1 roll 0 0 5 2 roll arc} cvlit { 0.8 0.9 0.8 setrgbcolor
+{ matrix currentmatrix x 2 y mul 1.5 rad mul 0 360 newpath arc} cvlit cvx exec fill setmatrix
+0 30 360 { /phi exch def
+/horz 0 def
+drawellipse
+/horz 1 def
+drawellipse
+} for
+} clipsave exch cvx exec clip setmatrix exec cliprestore} matrix currentmatrix 4 1 roll 3 -2 roll translate exec setmatrix
+/drawsector { matrix currentmatrix newpath 0 0 moveto 1 0 lineto 72 cos 72 sin lineto} cvlit def
+/drawstar { 72 72 360 { /phi exch def
+0.5 0.5 50 100 exch dup 3 1 roll sub 1 add rand exch mod add 100 div setrgbcolor
+100 100 {phi {drawsector cvx exec fill setmatrix} matrix currentmatrix 3 1 roll 2 -1 roll rotate exec setmatrix} matrix currentmatrix 4 1 roll 3 -2 roll scale exec setmatrix
+} for
+} def
+/drawobject { 20 20 360 { /i exch def
+x y {i {50 0 {drawstar} matrix currentmatrix 4 1 roll 3 -2 roll translate exec setmatrix} matrix currentmatrix 3 1 roll 2 -1 roll rotate exec setmatrix} matrix currentmatrix 4 1 roll 3 -2 roll translate exec setmatrix
+} for
+} def
+drawobject
+(Courier-Oblique) 70 selectfont
+0.4 0.4 0.8 setrgbcolor
+x 50 add 100 (myPS) 3 -2 roll moveto show
