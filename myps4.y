@@ -71,46 +71,64 @@ extern int yylineno;
 
 const char *PREAMBLE = "%!PS-Adobe\n%%Creator: myps4 compiler \n%%Title: ";
 
-/* Every operator is directly mapped to a sequence of postscript commands: */
+/* Every operator is directly mapped to a sequence of postscript commands as far as possible. The
+ * transformations and "clip" are handled in a special way, since they need to defer the execution
+ * of the term-argument until the current matrix is adjusted. Paths are represented by a procedure
+ * that generates them, so operations that construct paths must also be handled in a special way, so
+ * their result is returned in a form protected from execution. The operation "write" has 2
+ * signatures. This is handled in an ad hoc fashion in the rules. */
 map<string, string> OPERATION_TABLE = {
-    {string("draw"), string("cvx exec stroke grestore")},
-    {string("fill"), string("exec fill grestore")},
+    {string("draw"), string("cvx exec stroke setmatrix")},
+    {string("fill"), string("cvx exec fill setmatrix")},
     {string("setcolor"), string("setrgbcolor")},
     {string("setdrawstyle"), string("2 array astore 0 setdash")},
     {string("setfont"), string("selectfont")},
     {string("setlinewidth"), string("setlinewidth")},
     {string("arc"), string("newpath arc")},
-    {string("ellipse"), string("newpath 6 -2 roll translate 4 -2 roll dup 3 1 roll div 1 scale 3 1 roll 0 0 5 2 roll arc")},
+    {string("ellipse"), string("newpath 6 -2 roll translate 4 -2 roll dup 3 1 roll div 1 scale \
+3 1 roll 0 0 5 2 roll arc")},
     {string("string2path"), string("3 -2 roll moveto true charpath")},
     {string("num2string"), string("100 string cvs")},
     {string("write"), string("3 -2 roll moveto show")},
 
     {string("rotate"), string("\
-gsave \
+matrix currentmatrix \
+3 1 roll \
 2 -1 roll \
 rotate \
 exec \
-grestore")},
+setmatrix")},
 
     {string("scale"), string("\
-gsave \
+matrix currentmatrix \
+4 1 roll \
 3 -2 roll \
 scale \
 exec \
-grestore")},
+setmatrix")},
 
     {string("translate"), string("\
-gsave \
+matrix currentmatrix \
+4 1 roll \
 3 -2 roll \
 translate \
 exec \
-grestore")},
+setmatrix")},
+
+    {string("clip"), string("\
+clipsave \
+exch cvx exec \
+clip \
+setmatrix \
+exec \
+cliprestore")},
 
     {string("sin"), string("sin")},
     {string("cos"), string("cos")},
     {string("ln"), string("ln")},
     {string("abs"), string("abs")},
-    {string("exp"), string("exp")}
+    {string("exp"), string("exp")},
+    {string("random"), string("exch dup 3 1 roll sub 1 add rand exch mod add")}
 };
 
 /* These operations must defer the execution of their last argument until the current matrix has
@@ -121,6 +139,7 @@ map<string, int> DEFERRING_OPERATIONS = {
     {string("rotate"), 1},
     {string("scale"), 2},
     {string("translate"), 2},
+    {string("clip"), 1},
 };
 
 /* These operations expand to postscript code between curly braces with the "executable" attribute
@@ -188,9 +207,10 @@ escape_parentheses(const string &s)
     assignment      : ID ':' '=' expression ';'
                         { $$ = new ComplexNode("/" + $1->code + " " + $4->code + " def"); }
     ;
-    /* Late binding is implemented in a very simple way: We put curly braces around the right side
-     * so it becomes a procedure. Later when the variable is referenced, the procedure is executed
-     * automatically. When the right side is already between curly braces nothing is to be done. */
+    /* Late binding is implemented in a rather (too?) simple-minded way: We put curly braces around
+     * the right * side so it becomes a procedure. Later when the variable is referenced, the
+     * procedure is executed automatically according to the evaluation rules of postscript. When the
+     * right side is already between curly braces nothing is to be done. */
     late_binding    : ID LATE_BIND expression ';'
                         { 
                             if($3->code[0] != '{' )
@@ -222,6 +242,8 @@ escape_parentheses(const string &s)
                         { $$ = new ComplexNode($5->code + " " + $9->code + " " + $7->code + " { /"
                                                + $2->code + " exch def\n" + $11->code
                                                + "} for"); }
+    /* Operator precedence and associativity for +, -, *, /, mod and unary +/- is handled by bison
+     * according to the %left directives above. */
     expression      : factor { $$ = $1; }
                     | '+' factor { $$ = $2; }
                     | '-' factor { $$ = new ComplexNode($2->code + " -1 mul"); }
@@ -271,7 +293,8 @@ escape_parentheses(const string &s)
                                 exit(1);
                             }
                             $2->concat_children(" moveto ", " lineto ", " lineto") ;
-                            $$ = new ComplexNode("gsave { newpath " + $2->code + "} bind");
+                            $2->code = "{ matrix currentmatrix newpath " + $2->code + "} cvlit";
+                            $$ = $2;
                         }
     ;
     term            : '{' commands '}'
@@ -282,6 +305,8 @@ escape_parentheses(const string &s)
     eval_func       : ID '(' expression_list ')'
                         {
                             if(DEFERRING_OPERATIONS.count($1->code)) {
+                                /* The operation is deferring (i.e. a transformation). Protect the
+                                 * last argument from execution. */
                                 auto c = $3->children.begin();
                                 advance(c, DEFERRING_OPERATIONS[$1->code]);
                                 (*c)->code = "{" + (*c)->code + "}";
@@ -294,8 +319,9 @@ escape_parentheses(const string &s)
                                 cerr << "Unknown operation \"" + $1->code + "\".\n";
                                 exit(1);
                             }
+                            /* Protect the path-valued result from execution. */
                             if(PATH_CONSTRUCTORS.count($1->code))
-                                $$->code = "{ gsave " + $$->code + "} cvlit";
+                                $$->code = "{ matrix currentmatrix " + $$->code + "} cvlit";
                         }
     string          : STRING { $$ = new ComplexNode(escape_parentheses(strip_quotes($1->code))); }
 %%
