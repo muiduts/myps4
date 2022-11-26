@@ -1,4 +1,4 @@
 all:
 	make -C build myps4
 clean:
-	rm build/*.*
+	rm build/*.* build/myps4
