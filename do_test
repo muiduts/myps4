@@ -2,5 +2,5 @@
 
 echo Translating file test.mps to build/test.ps.
 ./build/myps4 test.mps > build/test.ps
-Opening build/test.ps with ghostview.
+echo Opening build/test.ps with ghostview.
 gv build/test.ps
